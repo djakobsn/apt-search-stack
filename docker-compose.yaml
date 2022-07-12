@@ -1,21 +1,51 @@
 version: "3"
 
 services:
-  db:
+  app-db:
     image: postgres@sha256:4ba3b78788bb284687376b9c1e0565b245375ddee0fe14cef25e315b6bd88b1a
     restart: always
     environment:
+      POSTGRES_DB: apt-search
       POSTGRES_PASSWORD: jkbn
     ports:
       - "5432:5432"
     volumes:
-      - pg_data:/var/lib/postgresql/data/
-  idp:
-    image: quay.io/keycloak/keycloak@sha256:b4841a7b8401fd209bfcddf10773cdfa7c7cfde4bf7e87780663226be5587ee2
-    entrypoint: /opt/keycloak/bin/kc.sh start-dev
-  ingress:
-    image: nginx@sha256:728f60fda76b3750259ff588f3c1fce07a59eaf6e08713f1441de50e91d221e8
+      - app_pg_data:/var/lib/postgresql/data/
+
+  idp-db:
+    image: postgres@sha256:4ba3b78788bb284687376b9c1e0565b245375ddee0fe14cef25e315b6bd88b1a
     restart: always
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: password
+    volumes:
+      - idp_pg_data:/var/lib/postgresql/data/
+
+  idp:
+    build:
+      context: ./docker/idp
+    entrypoint: /opt/keycloak/bin/kc.sh start --auto-build --http-relative-path=/idp --proxy passthrough --import-realm --http-enabled=true
+    environment:
+      KC_HOSTNAME: localhost
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      DB_VENDOR: postgres
+      DB_USER: keycloak
+      DB_PASSWORD: password
+      DB_ADDR: idp-db
+      PROXY_ADDRESS_FORWARDING: "true"
+    depends_on:
+      - idp-db
+
+  ingress:
+    build:
+      context: ./docker/ingress
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - idp
 #  api:
 #    image: scratch
 #    restart: always
@@ -28,4 +58,6 @@ services:
 
 
 volumes:
-  pg_data:
+  app_pg_data:
+  idp_pg_data:
+
